@@ -1,0 +1,75 @@
+version: '0.1'
+services:
+  ## uncomment if you need search attributes feature
+  ## dont forget to uncomment the ES related comments in the temporal service below
+  # elasticsearch:
+  #   container_name: temporal-elasticsearch
+  #   environment:
+  #     - cluster.routing.allocation.disk.threshold_enabled=true
+  #     - cluster.routing.allocation.disk.watermark.low=512mb
+  #     - cluster.routing.allocation.disk.watermark.high=256mb
+  #     - cluster.routing.allocation.disk.watermark.flood_stage=128mb
+  #     - discovery.type=single-node
+  #     - ES_JAVA_OPTS=-Xms100m -Xmx100m
+  #   image: elasticsearch:7.10.1
+  #   # networks:
+  #     # - temporal-network
+  #   ports:
+  #     - 9200:9200
+  postgresql:
+    image: postgres:12
+    environment:
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: temporal
+    ports:
+      - 5432:5432
+
+  temporal-server:
+    image: temporalio/auto-setup:1.18.4
+    depends_on:
+      - postgresql
+    #  - elasticsearch
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+    #  - ENABLE_ES=true
+    #  - ES_SEEDS=elasticsearch
+    #  - ES_VERSION=v7
+    ports:
+      - 7233:7233
+
+  temporal-ui:
+    image: temporalio/ui:2.8.3
+    depends_on:
+      - temporal-server
+    environment:
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_UI_PORT=8080
+    ports:
+      - 8233:8080
+
+  worker:
+    image: golang:1.19.3-alpine3.16
+    depends_on:
+      - temporal-server
+    environment:
+      - TEMPORAL_HOST_PORT=temporal-server:7233
+      - ACTIVITY_DURATION=1s
+    volumes:
+      - ".:/go/src/temporal-simple-demo"
+    working_dir: "/go/src/temporal-simple-demo"
+    command: ["sh", "-c", "cd cmd/worker && go run main.go"]
+
+  starter:
+    image: golang:1.19.3-alpine3.16
+    depends_on:
+      - temporal-server
+    environment:
+      - TEMPORAL_HOST_PORT=temporal-server:7233
+    volumes:
+      - ".:/go/src/temporal-simple-demo"
+    working_dir: "/go/src/temporal-simple-demo"
+    command: ["sh", "-c", "cd cmd/starter && go run main.go"]
